@@ -283,8 +283,6 @@ int fan_driver_major;
 
 static int fan_driver_init(void)
 {
-    int result = -1;
-
     printk(KERN_INFO "Inserting fan_driver module..\n");
     if(alloc_chrdev_region(&fan_dev, 0, 1, "fan_driver") < 0)
     {
@@ -345,7 +343,7 @@ static int fan_driver_init(void)
         iounmap(gpio_regs);
         iounmap(pwm_regs);
         class_destroy(cl);
-        unregister_chrdev_region(c_dev, 1);
+        unregister_chrdev_region(fan_dev, 1);
         return -1;
     }
 
