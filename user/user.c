@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -10,9 +11,11 @@ static bool check_if_num(char* str)
     char* coursor = str;
     while (*coursor)
     {
-        ++coursor;
         if (!isdigit(*coursor))
-            return false;
+        {
+        return false;
+        }
+        ++coursor;
     }
     return true;
 }
@@ -44,7 +47,7 @@ int main(int argc, char **argv)
         }
         else
         {
-            printf("Speed is: %s", &val);
+            printf("Speed is: %" PRId8 "\n", val);
         }
     }
     else if (strcmp("write", command) == 0)
@@ -64,11 +67,11 @@ int main(int argc, char **argv)
                 }
                 else if (fwrite(&val, 1, 1, f) < 1)
                 {
-                    printf("Error while write");
+                    printf("Error while write\n");
                 }
                 else
                 {
-                    printf("Speed changed to: %s", &val);
+                    printf("Speed changed to: %" PRId8 "\n", val);
                 }
             }
             else
@@ -78,7 +81,7 @@ int main(int argc, char **argv)
         }
     } else 
     {
-        printf("Command unknown!");
+        printf("Command unknown!\n");
     }
     fclose(f);
     return 0;

@@ -24,7 +24,7 @@ static struct cdev c_dev;
 static struct class *cl;
 
 /* GPIO registers */
-struct S_GPIO_REGS
+volatile struct S_GPIO_REGS
 {
     uint32_t GPFSEL[6];
     uint32_t Reserved0;
@@ -134,7 +134,7 @@ void SetGPIOFunction(GPIO pin, FSEL code)
 #define PWMCLK_DIV  41
 
 /* PWM registers */
-struct S_PWM_REGS
+volatile struct S_PWM_REGS
 {
     uint32_t CTL;
     uint32_t STA;
@@ -148,7 +148,7 @@ struct S_PWM_REGS
     uint32_t DAT2;
 } *pwm_regs;
 
-struct S_PWM_CTL {
+volatile struct S_PWM_CTL {
     unsigned PWEN1 : 1;
     unsigned MODE1 : 1;
     unsigned RPTL1 : 1;
@@ -237,6 +237,7 @@ void pwm_ratio(unsigned n, unsigned m) {
         if ( pwm_sta->WERR1 ) pwm_sta->WERR1 = 1; // Clear WERR bit if write occured on full FIFO while channel was transmitting
         if ( pwm_sta->BERR ) pwm_sta->BERR = 1; // Clear BERR bit if write to registers via APB occured while channel was transmitting
     }
+    printk("Atcive %d\n", n);
     udelay(10);
 
     // Enable PWM Channel 2
@@ -246,9 +247,9 @@ void pwm_ratio(unsigned n, unsigned m) {
 static uint8_t speed = 0;
 
 static void set_fan_speed(uint8_t new_speed) {
-    speed = new_speed % 256;
-    speed = speed == 255 ? 254 : speed;
-    pwm_ratio(speed , 254);
+    speed = new_speed;
+    unsigned to_set = speed * 1000 / 255;
+    pwm_ratio(to_set, 1000);
 }
 
 static int fan_driver_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -294,7 +295,7 @@ static int fan_driver_init(void)
         unregister_chrdev_region(fan_dev, 1);
         return -1;
     }
-    
+
     cl->dev_uevent = fan_driver_uevent;
 
     if (device_create(cl, NULL, fan_dev, NULL, "fan_driver") == NULL)
@@ -355,8 +356,8 @@ static int fan_driver_init(void)
 
     // Setting PWM with approx 1kHz frequency and fine tuning with 0.1% duty cycle step
     // PWM frequency can be calculated with formula pwmFrequency in Hz = 19200000Hz / divi / pwm_range.
-    pwm_frequency(3);
-    set_fan_speed(0);
+    pwm_frequency(1900);
+    set_fan_speed(100);
 
     return 0;
 }
@@ -417,7 +418,7 @@ static ssize_t fan_driver_read(struct file *filp, char __user *user_buffer, size
 {
     printk(KERN_ALERT "Read called!\n");
 
-    if (offset > 0 || len > 1)
+    if (*offset > 0 || len > 1)
     {
         return -EINVAL;
     }
@@ -435,15 +436,19 @@ static ssize_t fan_driver_write(struct file *filp, const char __user *user_buffe
 {
     printk(KERN_ALERT "Write called!\n");
 
-    if (offset > 0 || len > 1)
+    if (*offset > 0 || len > 1)
     {
+        printk("Offset >0 or len > 1. Offset: %zu\n", *offset);
         return -EINVAL;
     }
 
     if (copy_from_user(&speed + *offset, user_buffer, len))
     {
+         printk("copy to user failed\n");
         return -EFAULT;
     }
+
+    set_fan_speed(speed);
 
     *offset += len;
     return len; // Operation not permitted error
