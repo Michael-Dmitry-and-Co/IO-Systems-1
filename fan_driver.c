@@ -258,8 +258,8 @@ static int fan_driver_uevent(struct device *dev, struct kobj_uevent_env *env)
 }
 
 /* Declaration of fan_driver.c functions */
-int fan_driver_init(void);
-void fan_driver_exit(void);
+static int fan_driver_init(void);
+static void fan_driver_exit(void);
 static int fan_driver_open(struct inode *, struct file *);
 static int fan_driver_release(struct inode *, struct file *);
 static ssize_t fan_driver_read(struct file *, char *buf, size_t , loff_t *);
@@ -306,7 +306,7 @@ static int fan_driver_init(void)
         return -1;
     }
 
-    cdev_init(&cdev, &fan_driver_fops);
+    cdev_init(&c_dev, &fan_driver_fops);
 
     // Map the GPIO register space from PHYSICAL address space to VIRTUAL address space
     gpio_regs = (struct S_GPIO_REGS *)ioremap(GPIO_BASE, sizeof(struct S_GPIO_REGS));
@@ -345,7 +345,7 @@ static int fan_driver_init(void)
         iounmap(gpio_regs);
         iounmap(pwm_regs);
         class_destroy(cl);
-        unregister_chrdev_region(cdev, 1);
+        unregister_chrdev_region(c_dev, 1);
         return -1;
     }
 
@@ -363,7 +363,7 @@ static int fan_driver_init(void)
     return 0;
 }
 
-void fan_driver_exit(void)
+static void fan_driver_exit(void)
 {
     // Clearing the GPIO pins - setting to LOW
     gpio_regs->GPCLR[12/32] |= (1 << (12 % 32));
