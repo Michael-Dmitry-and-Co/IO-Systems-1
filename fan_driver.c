@@ -1,3 +1,5 @@
+#include <asm/io.h>
+#include <asm/uaccess.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -7,10 +9,7 @@
 #include <linux/types.h>
 #include <linux/proc_fs.h>
 #include <linux/delay.h>
-#include <asm/io.h>
-#include <asm/uaccess.h>
 #include <linux/uaccess.h>
-#include <linux/ioctl.h>
 #include <linux/atomic.h>
 
 MODULE_LICENSE("GPL");
@@ -18,6 +17,10 @@ MODULE_LICENSE("GPL");
 /* GPIO registers base address. */
 #define BCM2708_PERI_BASE   (0x3F000000)
 #define GPIO_BASE           (BCM2708_PERI_BASE + 0x200000)
+
+static dev_t fan_dev;
+static struct cdev c_dev;
+static struct class *cl;
 
 /* GPIO registers */
 struct S_GPIO_REGS
@@ -50,7 +53,9 @@ struct S_GPIO_REGS
 } *gpio_regs;
 
 /* GPIO pins available on connector p1 */
-typedef enum {GPIO_02 = 2,
+typedef enum 
+{
+    GPIO_02 = 2,
     GPIO_03 = 3,
     GPIO_04 = 4,
     GPIO_05 = 5,
@@ -75,23 +80,30 @@ typedef enum {GPIO_02 = 2,
     GPIO_24 = 24,
     GPIO_25 = 25,
     GPIO_26 = 26,
-              GPIO_27 = 27} GPIO;
+    GPIO_27 = 27
+}GPIO;
 
 /* GPIO Pin Pull-up/down */
-typedef enum {PULL_NONE = 0,
+typedef enum 
+{
+    PULL_NONE = 0,
     PULL_DOWN = 1,
-              PULL_UP = 2} PUD;
+    PULL_UP = 2
+} PUD;
 
 /* GPIO Pin Alternative Function selection */
 // By default GPIO pin is being used as an INPUT
-typedef enum {GPIO_INPUT     = 0b000,
-              GPIO_OUTPUT    = 0b001,
+typedef enum 
+{
+    GPIO_INPUT     = 0b000,
+    GPIO_OUTPUT    = 0b001,
     GPIO_ALT_FUNC0 = 0b100,
     GPIO_ALT_FUNC1 = 0b101,
     GPIO_ALT_FUNC2 = 0b110,
     GPIO_ALT_FUNC3 = 0b111,
     GPIO_ALT_FUNC4 = 0b011,
-              GPIO_ALT_FUNC5 = 0b010,} FSEL;
+    GPIO_ALT_FUNC5 = 0b010
+} FSEL;
 
 /*
  * SetGPIOFunction function
@@ -238,7 +250,12 @@ static void set_fan_speed(uint8_t new_speed) {
     pwm_ratio(speed , 254);
 }
 
- 
+static int fan_driver_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+    add_uevent_var(env, "DEVMODE=%#o", 0666);
+    return 0;
+}
+
 /* Declaration of fan_driver.c functions */
 int fan_driver_init(void);
 void fan_driver_exit(void);
@@ -249,12 +266,12 @@ static ssize_t fan_driver_write(struct file *, const char *buf, size_t , loff_t 
 
 /* Structure that declares fan_driver file operations */
 struct file_operations fan_driver_fops =
-    {
+{
     open            :   fan_driver_open,
     release         :   fan_driver_release,
     read            :   fan_driver_read,
     write           :   fan_driver_write
-    };
+};
 
 /* Declaration of the init and exit functions. */
 module_init(fan_driver_init);
@@ -263,51 +280,50 @@ module_exit(fan_driver_exit);
 /* Major number. */
 int fan_driver_major;
 
- 
 int fan_driver_init(void)
 {
     int result = -1;
 
     printk(KERN_INFO "Inserting fan_driver module..\n");
-
-    /* Registering device. */
-    result = register_chrdev(0, "fan_driver", &fan_driver_fops);
-    if (result < 0)
+    if(alloc_chrdev_region(&c_dev, 0, 1, "fan_driver") < 0)
     {
-        printk(KERN_INFO "fan_driver: cannot obtain major number %d\n", fan_driver_major);
-        return result;
+        return -1;
+    }
+    cl = class_create(THIS_MODULE, "fan_pwm_driver");
+    if (cl == NULL)
+    {
+        unregister_chrdev_region(cdev, 1);
+        return -1;
+    }
+    
+    cl->dev_uevent = fan_driver_uevent;
+
+    if (device_create(cl, NULL, fan_dev, NULL, "fan_dev") == NULL)
+    {
+        class_destroy(cl);
+        unregister_chrdev_region(cdev, 1);
+        return -1;
     }
 
-    fan_driver_major = result;
-    printk(KERN_INFO "fan_driver major number is %d\n", fan_driver_major);
+    cdev_init(&cdev, &fan_driver_fops);
 
     // Map the GPIO register space from PHYSICAL address space to VIRTUAL address space
     gpio_regs = (struct S_GPIO_REGS *)ioremap(GPIO_BASE, sizeof(struct S_GPIO_REGS));
     if(!gpio_regs)
     {
-        result = -ENOMEM;
-        if (gpio_regs)
-            iounmap(gpio_regs);
-        // Unmap the PWM registers PHYSICAL address space from VIRTUAL memory
-        /* Freeing the major number. */
-        unregister_chrdev(fan_driver_major, "fan_driver");
-
-        return result;
+        class_destroy(cl);
+        unregister_chrdev_region(cdev, 1);
+        return -1;
     }
 
     // Map the PWM register space from PHYSICAL address space to VIRTUAL address space
     pwm_regs = (struct S_PWM_REGS *)ioremap(PWM_BASE, sizeof(struct S_PWM_REGS));
     if(!pwm_regs)
     {
-        result = -ENOMEM;
-        if (pwm_regs)
-            iounmap(pwm_regs);
-        // Unmap the PWM Clock registers PHYSICAL address space from VIRTUAL memory
-
-        /* Freeing the major number. */
-        unregister_chrdev(fan_driver_major, "fan_driver");
-
-        return result;
+        iounmap(gpio_regs);
+        class_destroy(cl);
+        unregister_chrdev_region(cdev, 1);
+        return -1;
     }
     pwm_ctl = (struct S_PWM_CTL *) &pwm_regs -> CTL;
     pwm_sta = (struct S_PWM_STA *) &pwm_regs -> STA;
@@ -316,20 +332,20 @@ int fan_driver_init(void)
     pwm_clk_regs = ioremap(PWM_CLK_BASE, 4096);
     if(!pwm_clk_regs)
     {
-        result = -ENOMEM;
-        if (gpio_regs)
-            iounmap(gpio_regs);
-        // Unmap the PWM registers PHYSICAL address space from VIRTUAL memory
-        if (pwm_regs)
-            iounmap(pwm_regs);
-        // Unmap the PWM Clock registers PHYSICAL address space from VIRTUAL memory
-        if (pwm_clk_regs)
-            iounmap(pwm_clk_regs);
+        iounmap(gpio_regs);
+        iounmap(pwm_regs);
+        class_destroy(cl);
+        unregister_chrdev_region(cdev, 1);
+        return -1;
+    }
 
-        /* Freeing the major number. */
-        unregister_chrdev(fan_driver_major, "fan_driver");
-
-        return result;
+    if (cdev_add(&c_dev, fan_dev, 1) == -1) 
+    {
+        iounmap(gpio_regs);
+        iounmap(pwm_regs);
+        class_destroy(cl);
+        unregister_chrdev_region(cdev, 1);
+        return -1;
     }
 
     // Setting the GPIO pins alternative functions to PWM
@@ -373,9 +389,11 @@ void fan_driver_exit(void)
     unregister_chrdev(fan_driver_major, "fan_driver");
 }
 
+static atomic_t lock = ATOMIC_INIT(0);
+
 static int fan_driver_open(struct inode *inode, struct file *filp)
 {
-    printk(KERN_WARN "Open called!\n");
+    printk(KERN_WARNING "Open called!\n");
 
     if (atomic_cmpxchg(&lock, 0, 1) != 0)
     {
@@ -387,7 +405,7 @@ static int fan_driver_open(struct inode *inode, struct file *filp)
 
 static int fan_driver_release(struct inode *inode, struct file *filp)
 {
-    printk(LOG_WARN "Close called!\n");
+    printk(KERN_WARNING "Close called!\n");
 
     atomic_set(&lock, 0);
 
