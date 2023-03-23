@@ -384,8 +384,10 @@ static void fan_driver_exit(void)
 
     printk(KERN_INFO "Removing fan_driver module\n");
 
-    /* Freeing the major number. */
-    unregister_chrdev(fan_driver_major, "fan_driver");
+    cdev_del(&c_dev);
+    device_destroy(cl, fan_dev);
+    class_destroy(cl);
+    unregister_chrdev_region(fan_dev, 1);
 }
 
 static atomic_t lock = ATOMIC_INIT(0);
