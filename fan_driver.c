@@ -281,19 +281,19 @@ module_exit(fan_driver_exit);
 /* Major number. */
 int fan_driver_major;
 
-int fan_driver_init(void)
+static int fan_driver_init(void)
 {
     int result = -1;
 
     printk(KERN_INFO "Inserting fan_driver module..\n");
-    if(alloc_chrdev_region(&c_dev, 0, 1, "fan_driver") < 0)
+    if(alloc_chrdev_region(&fan_dev, 0, 1, "fan_driver") < 0)
     {
         return -1;
     }
     cl = class_create(THIS_MODULE, "fan_pwm_driver");
     if (cl == NULL)
     {
-        unregister_chrdev_region(cdev, 1);
+        unregister_chrdev_region(fan_dev, 1);
         return -1;
     }
     
@@ -302,7 +302,7 @@ int fan_driver_init(void)
     if (device_create(cl, NULL, fan_dev, NULL, "fan_dev") == NULL)
     {
         class_destroy(cl);
-        unregister_chrdev_region(cdev, 1);
+        unregister_chrdev_region(fan_dev, 1);
         return -1;
     }
 
@@ -313,7 +313,7 @@ int fan_driver_init(void)
     if(!gpio_regs)
     {
         class_destroy(cl);
-        unregister_chrdev_region(cdev, 1);
+        unregister_chrdev_region(fan_dev, 1);
         return -1;
     }
 
@@ -323,7 +323,7 @@ int fan_driver_init(void)
     {
         iounmap(gpio_regs);
         class_destroy(cl);
-        unregister_chrdev_region(cdev, 1);
+        unregister_chrdev_region(fan_dev, 1);
         return -1;
     }
     pwm_ctl = (struct S_PWM_CTL *) &pwm_regs -> CTL;
@@ -336,7 +336,7 @@ int fan_driver_init(void)
         iounmap(gpio_regs);
         iounmap(pwm_regs);
         class_destroy(cl);
-        unregister_chrdev_region(cdev, 1);
+        unregister_chrdev_region(fan_dev, 1);
         return -1;
     }
 
