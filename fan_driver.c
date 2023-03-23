@@ -297,7 +297,7 @@ static int fan_driver_init(void)
     
     cl->dev_uevent = fan_driver_uevent;
 
-    if (device_create(cl, NULL, fan_dev, NULL, "fan_dev") == NULL)
+    if (device_create(cl, NULL, fan_dev, NULL, "fan_driver") == NULL)
     {
         class_destroy(cl);
         unregister_chrdev_region(fan_dev, 1);
