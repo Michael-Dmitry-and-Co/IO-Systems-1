@@ -356,7 +356,7 @@ static int fan_driver_init(void)
 
     // Setting PWM with approx 1kHz frequency and fine tuning with 0.1% duty cycle step
     // PWM frequency can be calculated with formula pwmFrequency in Hz = 19200000Hz / divi / pwm_range.
-    pwm_frequency(1900);
+    pwm_frequency(19);
     set_fan_speed(100);
 
     return 0;
@@ -418,18 +418,20 @@ static ssize_t fan_driver_read(struct file *filp, char __user *user_buffer, size
 {
     printk(KERN_ALERT "Read called!\n");
 
-    if (*offset > 0 || len > 1)
+    if (*offset > 0)
     {
+         printk("Offset: %llu\n", *offset);
         return -EINVAL;
     }
 
-    if (copy_to_user(user_buffer, &speed + *offset, len))
+    if (copy_to_user(user_buffer, &speed + *offset, 1))
     {
+         printk("copy to user failed\n");
         return -EFAULT;
     }
 
     *offset += len;
-    return len;
+    return 1;
 }
 
 static ssize_t fan_driver_write(struct file *filp, const char __user *user_buffer, size_t len, loff_t *offset)
@@ -438,13 +440,11 @@ static ssize_t fan_driver_write(struct file *filp, const char __user *user_buffe
 
     if (*offset > 0 || len > 1)
     {
-        printk("Offset >0 or len > 1. Offset: %zu\n", *offset);
         return -EINVAL;
     }
 
     if (copy_from_user(&speed + *offset, user_buffer, len))
     {
-         printk("copy to user failed\n");
         return -EFAULT;
     }
 
