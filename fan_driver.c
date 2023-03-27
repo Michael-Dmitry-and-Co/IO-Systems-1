@@ -24,7 +24,7 @@ static struct cdev c_dev;
 static struct class *cl;
 
 /* GPIO registers */
-volatile struct S_GPIO_REGS
+static volatile struct S_GPIO_REGS
 {
     uint32_t GPFSEL[6];
     uint32_t Reserved0;
@@ -116,7 +116,7 @@ typedef enum
  *   Based on the specified GPIO pin number and function code, sets the GPIO pin to
  *   operate in the desired function. Each of the GPIO pins has at least two alternative functions.
  */
-void SetGPIOFunction(GPIO pin, FSEL code)
+static void SetGPIOFunction(GPIO pin, FSEL code)
 {
     int regIndex = pin / 10;
     int bit = (pin % 10) * 3;
@@ -134,7 +134,7 @@ void SetGPIOFunction(GPIO pin, FSEL code)
 #define PWMCLK_DIV  41
 
 /* PWM registers */
-volatile struct S_PWM_REGS
+static volatile struct S_PWM_REGS
 {
     uint32_t CTL;
     uint32_t STA;
@@ -148,7 +148,7 @@ volatile struct S_PWM_REGS
     uint32_t DAT2;
 } *pwm_regs;
 
-volatile struct S_PWM_CTL {
+static volatile struct S_PWM_CTL {
     unsigned PWEN1 : 1;
     unsigned MODE1 : 1;
     unsigned RPTL1 : 1;
@@ -168,7 +168,7 @@ volatile struct S_PWM_CTL {
     unsigned Reserved2 : 16;
 } *pwm_ctl;
 
-struct S_PWM_STA {
+static struct S_PWM_STA {
     unsigned FULL1 : 1;
     unsigned EMPT1 : 1;
     unsigned WERR1 : 1;
@@ -185,7 +185,7 @@ struct S_PWM_STA {
     unsigned Reserved : 19;
 } *pwm_sta;
 
-volatile unsigned int *pwm_clk_regs; // Holds the address of PWM CLK registers
+static volatile unsigned int *pwm_clk_regs; // Holds the address of PWM CLK registers
 
 /*
  * Establish PWM frequency function
@@ -195,7 +195,7 @@ volatile unsigned int *pwm_clk_regs; // Holds the address of PWM CLK registers
  *   Based on the passed GPIO pin number and function code, sets the GPIO pin to
  *   operate the desired function. Each of the GPIO pins has at least two alternative functions.
  */
-void pwm_frequency(uint32_t divi) {
+static void pwm_frequency(uint32_t divi) {
 
     // Kill the clock
     *(pwm_clk_regs+PWMCLK_CTL) = 0x5A000020;
@@ -211,7 +211,7 @@ void pwm_frequency(uint32_t divi) {
     *(pwm_clk_regs+PWMCLK_CTL) = 0x5A000011;
 }
 
-void set_up_pwm_channels(void){
+static void set_up_pwm_channels(void){
     // Channel 2 set-up
     pwm_ctl->MODE2 = 0;
     pwm_ctl->RPTL2 = 0;
@@ -221,7 +221,7 @@ void set_up_pwm_channels(void){
     pwm_ctl->MSEN2 = 1;
 }
 
-void pwm_ratio(unsigned n, unsigned m) {
+static void pwm_ratio(unsigned n, unsigned m) {
 
     // Disable PWM Channel 2
     pwm_ctl->PWEN2 = 0;
@@ -237,7 +237,6 @@ void pwm_ratio(unsigned n, unsigned m) {
         if ( pwm_sta->WERR1 ) pwm_sta->WERR1 = 1; // Clear WERR bit if write occured on full FIFO while channel was transmitting
         if ( pwm_sta->BERR ) pwm_sta->BERR = 1; // Clear BERR bit if write to registers via APB occured while channel was transmitting
     }
-    printk("Atcive %d\n", n);
     udelay(10);
 
     // Enable PWM Channel 2
@@ -280,7 +279,7 @@ module_init(fan_driver_init);
 module_exit(fan_driver_exit);
 
 /* Major number. */
-int fan_driver_major;
+static int fan_driver_major;
 
 static int fan_driver_init(void)
 {
@@ -395,8 +394,6 @@ static atomic_t lock = ATOMIC_INIT(0);
 
 static int fan_driver_open(struct inode *inode, struct file *filp)
 {
-    printk(KERN_WARNING "Open called!\n");
-
     if (atomic_cmpxchg(&lock, 0, 1) != 0)
     {
         return -EBUSY;
@@ -407,8 +404,6 @@ static int fan_driver_open(struct inode *inode, struct file *filp)
 
 static int fan_driver_release(struct inode *inode, struct file *filp)
 {
-    printk(KERN_WARNING "Close called!\n");
-
     atomic_set(&lock, 0);
 
     return 0;
@@ -416,17 +411,13 @@ static int fan_driver_release(struct inode *inode, struct file *filp)
 
 static ssize_t fan_driver_read(struct file *filp, char __user *user_buffer, size_t len, loff_t *offset)
 {
-    printk(KERN_ALERT "Read called!\n");
-
     if (*offset > 0)
     {
-         printk("Offset: %llu\n", *offset);
         return -EINVAL;
     }
 
     if (copy_to_user(user_buffer, &speed + *offset, 1))
     {
-         printk("copy to user failed\n");
         return -EFAULT;
     }
 
@@ -436,8 +427,6 @@ static ssize_t fan_driver_read(struct file *filp, char __user *user_buffer, size
 
 static ssize_t fan_driver_write(struct file *filp, const char __user *user_buffer, size_t len, loff_t *offset)
 {
-    printk(KERN_ALERT "Write called!\n");
-
     if (*offset > 0 || len > 1)
     {
         return -EINVAL;
