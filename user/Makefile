@@ -6,3 +6,9 @@ $(BUILDDIR)/user: $(BUILDDIR) $(SRCDIR)/user.c
 
 clean:
 	rm $(BUILDDIR)/*
+
+$(BUILDDIR):
+	mkdir $(BUILDDIR)
+
+$(SRCDIR):
+	$(error Can not find sources dir)

@@ -1,7 +1,7 @@
 SRCDIR = src
 BUILDDIR = build
 
-obj-m += fan_driver.o
+obj-m += $(BUILDDIR)/fan_driver.o
 
 all: $(SRCDIR) $(BUILDDIR)
 	cp $(SRCDIR)/*.c $(BUILDDIR)
